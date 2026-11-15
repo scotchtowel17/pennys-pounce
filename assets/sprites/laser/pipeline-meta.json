@@ -1,0 +1,64 @@
+{
+  "target": "asset",
+  "mode": "sheet",
+  "prompt": "",
+  "role": "",
+  "input": "/workspace/artifacts/imagine_images/df84cec0-8adf-456e-a9d7-f049cf36ccfd.jpg",
+  "threshold": 130,
+  "edge_threshold": 175,
+  "duration": 200,
+  "rows": 1,
+  "cols": 1,
+  "cell_size": 128,
+  "fit_scale": 0.88,
+  "trim_border": 4,
+  "edge_clean_depth": 3,
+  "align": "center",
+  "shared_scale": true,
+  "component_mode": "largest",
+  "component_padding": 0,
+  "min_component_area": 1,
+  "edge_touch_margin": 0,
+  "frame_labels": [
+    "frame-1"
+  ],
+  "frames": [
+    {
+      "grid": [
+        0,
+        0
+      ],
+      "source_box": [
+        0,
+        0,
+        1408,
+        1408
+      ],
+      "component_mode": "largest",
+      "component_count": 36,
+      "selected_component_area": 90025,
+      "selected_component_bbox": [
+        527,
+        511,
+        874,
+        856
+      ],
+      "crop_bbox": [
+        527,
+        511,
+        874,
+        856
+      ],
+      "edge_touch": false,
+      "output_size": [
+        112,
+        111
+      ],
+      "paste_position": [
+        8,
+        8
+      ]
+    }
+  ],
+  "edge_touch_frames": []
+}

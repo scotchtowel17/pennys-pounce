@@ -1,0 +1,12 @@
+node_modules
+dist
+.output
+.vercel
+artifacts
+screenshots
+.grok/preview.log
+.grok/status
+*.log
+.env
+.env.*
+.DS_Store

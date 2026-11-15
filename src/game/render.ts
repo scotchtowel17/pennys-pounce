@@ -763,8 +763,6 @@ function poseFrame(t: number, dur: number, frames: number) {
   return { frame: Math.min(frames - 1, Math.floor(u)) };
 }
 
-const RUN_FRAMES = [0, 1, 2, 3, 4, 5, 7, 9, 10, 11];
-const CLIMB_FRAMES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const JUMP_SCALE = [1, 1, 1.08, 1.14, 1.14, 1.14, 1.08, 0.96, 1, 1, 1, 1];
 
 function drawPenny(ctx: CanvasRenderingContext2D, game: Game, art: ArtSet) {
@@ -789,18 +787,17 @@ function drawPenny(ctx: CanvasRenderingContext2D, game: Game, art: ArtSet) {
         frame = 8;
         tilt = p.cling * 0.08;
       } else if (Math.abs(p.vy) > 20) {
-        frame = CLIMB_FRAMES[Math.floor(game.time * 9) % CLIMB_FRAMES.length]!;
+        frame = Math.floor(Math.abs(p.y) / 18) % (sheet?.frames ?? 12);
       } else {
         frame = 2;
       }
     } else {
-      const n = sheet?.frames ?? 12;
-      frame = Math.floor(game.time * 4) % n;
+      frame = 0;
     }
   } else if (pouncing) {
     sheet = poof ? art.poof : art.jump;
     key = poof ? "poof-pounce" : "pounce";
-    frame = sheet === art.jump ? 8 : Math.floor(game.time * 8) % (sheet?.frames ?? 12);
+    frame = sheet === art.jump ? 8 : 0;
     tilt = p.facing * 0.14;
   } else if (!p.grounded) {
     sheet = poof ? art.poof : art.jump;
@@ -814,8 +811,7 @@ function drawPenny(ctx: CanvasRenderingContext2D, game: Game, art: ArtSet) {
       extraScale = JUMP_SCALE[frame] ?? 1;
       tilt = Math.max(-0.14, Math.min(0.14, (p.vy / 2600) * p.facing));
     } else {
-      const n = sheet?.frames ?? 12;
-      frame = Math.floor(game.time * 8) % n;
+      frame = 0;
     }
   } else if (p.fidget === "stretch" && art.stretch) {
     sheet = art.stretch;
@@ -832,14 +828,14 @@ function drawPenny(ctx: CanvasRenderingContext2D, game: Game, art: ArtSet) {
   } else if (p.fidget === "none" && Math.abs(p.vx) > 20) {
     sheet = poof ? art.poofRun : art.run;
     key = poof ? "poof-run" : "run";
-    const idx = Math.floor(p.anim) % RUN_FRAMES.length;
-    frame = RUN_FRAMES[idx]!;
+    const n = sheet?.frames ?? 12;
+    frame = Math.floor(p.anim) % n;
     tilt = Math.max(-0.07, Math.min(0.07, p.vx / 4800));
-    bobY = -Math.abs(Math.sin((p.anim * Math.PI) / RUN_FRAMES.length)) * 1.6;
+    bobY = -Math.abs(Math.sin(game.time * 12)) * 1.6;
   } else {
     sheet = poof ? art.poof : art.idle;
     key = poof ? "poof" : "idle";
-    frame = poof ? Math.floor(game.time * 6) % (sheet?.frames ?? 12) : 0;
+    frame = 0;
     const breath = Math.sin(game.time * 2.6) * 0.018;
     breathX = 1 - breath * 0.5;
     breathY = 1 + breath;

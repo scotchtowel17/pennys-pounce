@@ -551,18 +551,12 @@ export class Game {
     const windCap = max + 180;
     p.vx = Math.max(-windCap, Math.min(windCap, p.vx));
 
-    if (p.grounded && !lunging && Math.abs(p.vx) > 20) {
-      const speedRatio = Math.abs(p.vx) / RUN;
-      p.anim += dt * 11.5 * Math.max(0.55, speedRatio);
-    } else if (p.grounded && Math.abs(p.vx) <= 20) {
-      p.anim = 0;
-    }
-
     if (Math.abs(p.vx) > 28 && p.grounded && !lunging) {
       this.stepDist += Math.abs(p.vx) * dt;
       const stride = sprint ? 18 : 26;
       while (this.stepDist >= stride) {
         this.stepDist -= stride;
+        p.anim += 1;
         this.events.push(sprint ? "scuttle-fast" : "scuttle");
         if (!this.reduce) this.puff(p.x + p.w / 2, p.y + p.h, "#c8b59a", sprint ? 2 : 1);
       }

@@ -74,6 +74,8 @@ type Player = {
   fidget: "none" | "stretch" | "roll" | "tail";
   fidgetT: number;
   idleT: number;
+  squashX: number;
+  squashY: number;
 };
 
 export type InputState = {
@@ -223,6 +225,11 @@ export class Game {
   private jarLock = false;
   private stun = new Map<string, number>();
   private dead = new Set<string>();
+  pounceTrail: { x: number; y: number; facing: 1 | -1; big: boolean; poof: number; life: number }[] = [];
+
+  get isPouncing() {
+    return this.pounceT > 0;
+  }
 
   constructor() {
     this.reduce =
@@ -253,6 +260,7 @@ export class Game {
     this.pounceHeld = false;
     this.pounceStrike = 0;
     this.clingLock = 0;
+    this.pounceTrail = [];
     this.player = this.makePlayer();
     this.place();
     this.initBoss();
@@ -265,6 +273,7 @@ export class Game {
   respawn() {
     this.phase = "play";
     this.deadT = 0;
+    this.pounceTrail = [];
     this.place();
     this.player.iframe = 1.2;
     this.player.vx = 0;
@@ -364,6 +373,8 @@ export class Game {
       fidget: "none",
       fidgetT: 0,
       idleT: 0,
+      squashX: 1,
+      squashY: 1,
     };
   }
 
@@ -394,6 +405,8 @@ export class Game {
     p.fidget = "none";
     p.fidgetT = 0;
     p.idleT = 0;
+    p.squashX = 1;
+    p.squashY = 1;
   }
 
   private step(dt: number, input: InputState) {
@@ -409,9 +422,31 @@ export class Game {
     if (p.bounceLock > 0) p.bounceLock = Math.max(0, p.bounceLock - dt);
     if (p.dropLock > 0) p.dropLock = Math.max(0, p.dropLock - dt);
     if (this.clingLock > 0) this.clingLock = Math.max(0, this.clingLock - dt);
-    if (this.pounceT > 0) this.pounceT = Math.max(0, this.pounceT - dt);
+    if (this.pounceT > 0) {
+      this.pounceT = Math.max(0, this.pounceT - dt);
+      if (!this.reduce) {
+        this.pounceTrail.push({
+          x: p.x,
+          y: p.y,
+          facing: p.facing,
+          big: p.big,
+          poof: p.poof,
+          life: 0.16,
+        });
+      }
+    }
+    for (const t of this.pounceTrail) t.life -= dt;
+    this.pounceTrail = this.pounceTrail.filter((t) => t.life > 0);
     if (this.pounceCd > 0) this.pounceCd = Math.max(0, this.pounceCd - dt);
     if (this.pounceStrike > 0) this.pounceStrike = Math.max(0, this.pounceStrike - dt);
+    if (this.reduce) {
+      p.squashX = 1;
+      p.squashY = 1;
+    } else {
+      const sk = 1 - Math.exp(-16 * dt);
+      p.squashX += (1 - p.squashX) * sk;
+      p.squashY += (1 - p.squashY) * sk;
+    }
     for (const [id, left] of this.stun) {
       if (left <= dt) this.stun.delete(id);
       else this.stun.set(id, left - dt);
@@ -485,6 +520,8 @@ export class Game {
       p.riding = null;
       p.cling = 0;
       p.fidget = "none";
+      p.squashX = 1.24;
+      p.squashY = 0.82;
       this.pounceT = 0.16;
       this.pounceStrike = 0.28;
       this.pounceCd = 0.82;
@@ -514,12 +551,18 @@ export class Game {
     const windCap = max + 180;
     p.vx = Math.max(-windCap, Math.min(windCap, p.vx));
 
+    if (p.grounded && !lunging && Math.abs(p.vx) > 20) {
+      const speedRatio = Math.abs(p.vx) / RUN;
+      p.anim += dt * 11.5 * Math.max(0.55, speedRatio);
+    } else if (p.grounded && Math.abs(p.vx) <= 20) {
+      p.anim = 0;
+    }
+
     if (Math.abs(p.vx) > 28 && p.grounded && !lunging) {
       this.stepDist += Math.abs(p.vx) * dt;
       const stride = sprint ? 18 : 26;
       while (this.stepDist >= stride) {
         this.stepDist -= stride;
-        p.anim += 1;
         this.events.push(sprint ? "scuttle-fast" : "scuttle");
         if (!this.reduce) this.puff(p.x + p.w / 2, p.y + p.h, "#c8b59a", sprint ? 2 : 1);
       }
@@ -542,6 +585,8 @@ export class Game {
         p.jumpsLeft = 1;
         p.coyote = 0;
         p.cling = 0;
+        p.squashX = 0.84;
+        p.squashY = 1.18;
         this.buffer = 0;
         this.cutDone = false;
         this.clingLock = 0.14;
@@ -569,6 +614,8 @@ export class Game {
       p.riding = null;
       p.coyote = 0;
       p.jumpsLeft = 1;
+      p.squashX = 0.84;
+      p.squashY = 1.18;
       this.buffer = 0;
       this.cutDone = false;
       p.jumpAge = 0;
@@ -577,6 +624,8 @@ export class Game {
     } else if (side === 0 && this.buffer > 0 && p.jumpsLeft > 0 && !p.grounded) {
       p.vy = p.big ? DOUBLE_BIG : DOUBLE;
       p.jumpsLeft = 0;
+      p.squashX = 0.84;
+      p.squashY = 1.18;
       this.buffer = 0;
       this.cutDone = false;
       this.events.push("double");
@@ -610,11 +659,17 @@ export class Game {
 
     if (landed.kind) {
       const wasHigh = landed.impact > 520;
+      const wasAirborne = !p.grounded && landed.impact > 120;
       p.grounded = true;
       p.groundKind = landed.kind;
       p.riding = landed.ride;
       p.coyote = COYOTE;
       p.jumpsLeft = 1;
+      if (wasAirborne) {
+        const s = Math.min(0.24, landed.impact / 3200);
+        p.squashX = 1 + s;
+        p.squashY = 1 - s * 0.75;
+      }
       if (wasHigh) this.puff(p.x + p.w / 2, p.y + p.h, "#c8b59a", 4);
     } else {
       p.grounded = false;

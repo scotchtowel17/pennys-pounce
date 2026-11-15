@@ -763,54 +763,105 @@ function poseFrame(t: number, dur: number, frames: number) {
   return { frame: Math.min(frames - 1, Math.floor(u)) };
 }
 
+const RUN_FRAMES = [0, 1, 2, 3, 4, 5, 7, 9, 10, 11];
+const CLIMB_FRAMES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const JUMP_SCALE = [1, 1, 1.08, 1.14, 1.14, 1.14, 1.08, 0.96, 1, 1, 1, 1];
+
 function drawPenny(ctx: CanvasRenderingContext2D, game: Game, art: ArtSet) {
   const p = game.player;
   const poof = p.poof > 0;
   const climbing = !!p.climbing || p.cling !== 0;
+  const pouncing = game.isPouncing;
   let sheet: Sheet | null = null;
   let frame = 0;
   let key = "idle";
+  let extraScale = 1;
+  let tilt = 0;
+  let bobY = 0;
+  let breathX = 1;
+  let breathY = 1;
+
   if (climbing) {
     sheet = art.climb ?? (poof ? art.poof : art.jump);
     key = "climb";
-    const n = sheet?.frames ?? 12;
-    const u = game.time * (Math.abs(p.vy) > 20 ? 4 : 2);
-    frame = Math.floor(u) % n;
+    if (sheet === art.climb) {
+      if (p.cling !== 0) {
+        frame = 8;
+        tilt = p.cling * 0.08;
+      } else if (Math.abs(p.vy) > 20) {
+        frame = CLIMB_FRAMES[Math.floor(game.time * 9) % CLIMB_FRAMES.length]!;
+      } else {
+        frame = 2;
+      }
+    } else {
+      const n = sheet?.frames ?? 12;
+      frame = Math.floor(game.time * 4) % n;
+    }
+  } else if (pouncing) {
+    sheet = poof ? art.poof : art.jump;
+    key = poof ? "poof-pounce" : "pounce";
+    frame = sheet === art.jump ? 8 : Math.floor(game.time * 8) % (sheet?.frames ?? 12);
+    tilt = p.facing * 0.14;
   } else if (!p.grounded) {
     sheet = poof ? art.poof : art.jump;
     key = poof ? "poof-air" : "jump";
-    const n = sheet?.frames ?? 12;
-    const u = Math.min(0.999, Math.min(p.jumpAge, 0.95) / 0.95) * n;
-    frame = Math.min(n - 1, Math.floor(u));
+    if (sheet === art.jump) {
+      if (p.vy < -420) frame = 2;
+      else if (p.vy < -160) frame = 3;
+      else if (p.vy <= 140) frame = p.vy < 0 ? 4 : 5;
+      else if (p.vy <= 450) frame = 8;
+      else frame = 9;
+      extraScale = JUMP_SCALE[frame] ?? 1;
+      tilt = Math.max(-0.14, Math.min(0.14, (p.vy / 2600) * p.facing));
+    } else {
+      const n = sheet?.frames ?? 12;
+      frame = Math.floor(game.time * 8) % n;
+    }
   } else if (p.fidget === "stretch" && art.stretch) {
     sheet = art.stretch;
     key = "stretch";
-    const posed = poseFrame(p.fidgetT, 3.2, sheet.frames);
-    frame = posed.frame;
+    frame = poseFrame(p.fidgetT, 3.2, sheet.frames).frame;
   } else if (p.fidget === "roll" && art.roll) {
     sheet = art.roll;
     key = "roll";
-    const posed = poseFrame(p.fidgetT, 3.4, sheet.frames);
-    frame = posed.frame;
+    frame = poseFrame(p.fidgetT, 3.4, sheet.frames).frame;
   } else if (p.fidget === "tail" && art.tail) {
     sheet = art.tail;
     key = "tail";
-    const posed = poseFrame(p.fidgetT, 2.8, sheet.frames);
-    frame = posed.frame;
-  } else if (p.fidget === "none" && Math.abs(p.vx) > 30) {
+    frame = poseFrame(p.fidgetT, 2.8, sheet.frames).frame;
+  } else if (p.fidget === "none" && Math.abs(p.vx) > 20) {
     sheet = poof ? art.poofRun : art.run;
     key = poof ? "poof-run" : "run";
-    const n = sheet?.frames ?? 12;
-    frame = Math.floor(p.anim) % n;
+    const idx = Math.floor(p.anim) % RUN_FRAMES.length;
+    frame = RUN_FRAMES[idx]!;
+    tilt = Math.max(-0.07, Math.min(0.07, p.vx / 4800));
+    bobY = -Math.abs(Math.sin((p.anim * Math.PI) / RUN_FRAMES.length)) * 1.6;
   } else {
     sheet = poof ? art.poof : art.idle;
     key = poof ? "poof" : "idle";
-    frame = 0;
+    frame = poof ? Math.floor(game.time * 6) % (sheet?.frames ?? 12) : 0;
+    const breath = Math.sin(game.time * 2.6) * 0.018;
+    breathX = 1 - breath * 0.5;
+    breathY = 1 + breath;
   }
   if (!sheet && art.idle) {
     sheet = art.idle;
     key = "idle";
   }
+
+  for (const t of game.pounceTrail) {
+    const trailSheet = t.poof > 0 ? art.poof : art.jump;
+    if (!trailSheet) continue;
+    const tScale = t.big ? 1.32 : 1;
+    const tSize = 100 * tScale;
+    const tCx = t.x + (t.big ? 34 * 1.2 : 34) / 2;
+    const tFoot = t.y + (t.big ? 26 * 1.2 : 26);
+    ctx.save();
+    ctx.globalAlpha = 0.24 * (t.life / 0.16);
+    blitSheet(ctx, trailSheet, trailSheet === art.jump ? 8 : 0, tCx, tFoot, tSize, t.facing === -1);
+    ctx.restore();
+  }
+
   if (!sheet) {
     const blink = p.iframe > 0 && Math.floor(game.time * 16) % 2 === 0;
     ctx.save();
@@ -830,7 +881,7 @@ function drawPenny(ctx: CanvasRenderingContext2D, game: Game, art: ArtSet) {
   ctx.save();
   ctx.globalAlpha = blink ? 0.45 : 1;
   const scale = (p.big ? 1.32 : 1) * (game.phase === "dead" ? 0.92 : 1);
-  const size = 100 * scale;
+  const size = 100 * scale * extraScale;
   const cx = p.x + p.w / 2;
   const foot = p.y + p.h;
   ctx.fillStyle = "rgba(60,40,30,0.18)";
@@ -838,11 +889,14 @@ function drawPenny(ctx: CanvasRenderingContext2D, game: Game, art: ArtSet) {
   ctx.ellipse(cx, foot + 2, 16 * scale * (p.fidget === "roll" ? 1.35 : 1), 5, 0, 0, Math.PI * 2);
   ctx.fill();
 
+  ctx.translate(cx, foot + bobY);
   if (game.phase === "dead") {
-    ctx.translate(cx, foot);
     ctx.rotate(p.facing * 0.4);
-    ctx.translate(-cx, -foot);
+  } else if (tilt !== 0) {
+    ctx.rotate(tilt);
   }
+  ctx.scale(p.squashX * breathX, p.squashY * breathY);
+  ctx.translate(-cx, -foot);
 
   blitSheet(ctx, sheet, frame, cx, foot, size, flip);
   ctx.restore();
